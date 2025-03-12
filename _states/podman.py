@@ -193,12 +193,54 @@ def present(
                 break
         else:
             changes["created"] = name
+            changes["image"] = image
+            if command:
+                 changes["command"] = command
+            if user:
+                 changes["user"] = user
+            if kwargs.get('environment', None) is not None:
+                 changes["environment"] = kwargs.get('environment', None)
+            if kwargs.get('mounts', None) is not None:
+                 changes["mounts"] = kwargs.get('mounts', None)
+            if kwargs.get('ports', None) is not None:
+                 changes["ports"] = kwargs.get('ports', None)
+            if kwargs.get('userns_mode', None) is not None:
+                 changes["userns_mode"] = kwargs.get('userns_mode', None)
+
+            changes["updated"] = name
 
         if curr is not None:
+            cfg = curr.inspect()['Config']
             if pull:
                 new_img = __salt__["podman.pull"](image, user=user)
                 if new_img["Id"] != curr["ImageID"]:
                     changes["ImageId"] = {"old": curr["ImageID"], "new": new_img["Id"]}
+
+            existing_image = cfg['Image']
+            if existing_image != image:
+            changes["image"] = {"old": existing_image, "new": image}
+
+            existing_cmd = cfg['Cmd']
+            if existing_cmd != command:
+                changes["command"] = {"old": existing_cmd, "new": command}
+
+            existing_entrypoint = cfg['Entrypoint']
+            defined_entrypoint = kwargs.get('entrypoint', None)
+            if existing_entrypoint != defined_entrypoint:
+                changes["entrypoint"] = {"old": existing_entrypoint, "new": defined_entrypoint}
+
+            existing_env = { k: v for k, v in map(lambda x: x.split('=', 1), cfg['Env'] or []) }
+            defined_env = kwargs.get('environment', {})
+            different_keys = {
+                key: {
+                    "new": defined_env[key],
+                    "old": existing_env[key]
+                }
+                for key in existing_env 
+                    if key in defined_env and existing_env[key] != defined_env[key]
+            }
+            if len(different_keys) > 0:
+                changes["environment"] = different_keys
 
         if not changes:
             return ret
